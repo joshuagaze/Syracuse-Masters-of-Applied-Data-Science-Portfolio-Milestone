@@ -1,0 +1,573 @@
+---
+K-Means Code
+---
+
+# import libraries
+```{r, results = 'hide'}
+library("mlr") 
+library("caret")
+library("tidyverse")     
+library("DataExplorer")  
+library("factoextra")    
+library("dendextend")    
+library("reshape2")      
+library("ggforce")       
+library("cluster")       
+library("corrplot")
+library("cluster")
+library("NbClust")
+library("gridExtra")
+library("GGally")
+```
+
+# import data
+```{r}
+df <- read.csv("/Users/jgaze/Documents/Syracuse/IST 707 - Applied Machine Learning/Project/CC GENERAL.csv")
+original_df <- df
+```
+
+# Overview of the Dataset's Variables:
+CUSTID : Identification of Credit Card holder (Categorical)
+BALANCE : Balance amount left in their account to make purchases (
+BALANCEFREQUENCY : How frequently the Balance is updated, score between 0 and 1 (1 = frequently updated, 0 = not frequently updated)
+PURCHASES : Amount of purchases made from account
+ONEOFFPURCHASES : Maximum purchase amount done in one-go
+INSTALLMENTSPURCHASES : Amount of purchase done in installment
+CASHADVANCE : Cash in advance given by the user
+PURCHASESFREQUENCY : How frequently the Purchases are being made, score between 0 and 1 (1 = frequently purchased, 0 = not frequently purchased)
+ONEOFFPURCHASESFREQUENCY : How frequently Purchases are happening in one-go (1 = frequently purchased, 0 = not frequently purchased)
+PURCHASESINSTALLMENTSFREQUENCY : How frequently purchases in installments are being done (1 = frequently done, 0 = not frequently done)
+CASHADVANCEFREQUENCY : How frequently the cash in advance being paid
+CASHADVANCETRX : Number of Transactions made with "Cash in Advanced"
+PURCHASESTRX : Number of purchase transactions made
+CREDITLIMIT : Limit of Credit Card for user
+PAYMENTS : Amount of Payment done by user
+MINIMUM_PAYMENTS : Minimum amount of payments made by user
+PRCFULLPAYMENT : Percent of full payment paid by user
+TENURE : Tenure of credit card service for user
+
+# Exploratory Data Analysis
+```{r}
+str(df)
+```
+The above shows us that with the exception of CUST_ID, all the variables are quantitative in nature.
+
+```{r}
+summary(df)
+```
+We see from the summary(df) call that there are 313 NA values in the MINIMUM_PAYMENTS attribute, and 1 NA value in the CREDIT_LIMIT attribute.
+We can also see some details of the distributions of our variables. We can confirm with visualization but there appears to be a number of variables with positive skewness. 
+
+```{r}
+# plot to show the missing values that may be present for each variable in the dataset
+plot_missing(df, title = "Percentage of Records that are NA",)
+```
+We see from the above figure that we only have two attributes that contain missing values, MINIMUM_PAYMENTS (3.5%) and CREDIT_LIMIT (0.01%)
+
+
+```{r}
+# remove CUST_ID feature as it provides zero insightful knowledge in this dataset
+df <- df %>% 
+  select(-c("CUST_ID"))
+```
+
+```{r}
+# for MINIMUM_PAYMENTS that are NA, replace with 0
+df$MINIMUM_PAYMENTS[which(is.na(df$MINIMUM_PAYMENTS))] <- 0
+
+# for CREDIT_LIMIT that are NA, replace with the median of the non.na entries. Due to the underlying non-normal distribution
+df$CREDIT_LIMIT[which(is.na(df$CREDIT_LIMIT))] <- median(df$CREDIT_LIMIT, na.rm=TRUE)
+```
+
+
+
+```{r}
+# Boxplots for each Attribute  
+df %>%
+  gather(Attributes, values, c(1:4, 6:12)) %>%
+  ggplot(aes(x=reorder(Attributes, values, FUN=median), y=values, fill=Attributes)) +
+  geom_boxplot(show.legend=FALSE,notch = TRUE) +
+  labs(title="Boxplot Distribution of all Attributes") +
+  theme(axis.title.y=element_blank(),
+        axis.title.x=element_blank()) +
+  ylim(0, 30) +
+  coord_flip()
+```
+
+```{r}
+# Histogram's to display the underlying distribution of each attribute in the dataset
+df %>% 
+  gather(Attributes, value, 1:17) %>% 
+  ggplot(aes(x=value)) +
+  geom_histogram(fill = "#00B8E7", color = "lightgrey") + 
+  facet_wrap(~Attributes, scales = "free_x") +
+  labs(x = "Value", y = "Frequency",
+      title="Histogram Distributions of all Attributes")  
+```
+from the histogram plots above, we see a great deal of skewness within a majority of the variables within the dataset
+
+correlation plot to see the interactions/relationships that variables might have with others in the dataset. A significant interaction may yield one of those variables to be skimmed to prevent multicollinearity.
+```{r}
+corrplot(cor(df), diag = FALSE, type = "upper", order = "hclust",
+         tl.col = "black", tl.pos = "td", tl.cex = 0.50, method = "circle")
+```
+
+
+```{r}
+# Violin plot of Account Balance over Tenure
+ggplot(df, aes(x=as.factor(TENURE), y=BALANCE, fill = as.factor(TENURE))) +
+  geom_violin() + 
+  xlab("TENURE") +
+  guides(fill = guide_legend(title = "TENURE")) +
+  ggtitle("Violin Plot of Account_Balance over Cardholder Tenure")
+  
+```
+
+
+
+```{r}
+# Normalization 
+df_scaled <- as.data.frame(scale(df))
+
+# Original data
+plt_original <- ggplot(df, aes(x=CREDIT_LIMIT, y=BALANCE)) +
+  geom_point() +
+  labs(title="Original Scale of Attributes") +
+  theme_bw()
+
+# Normalized data 
+plt_normalized <- ggplot(df_scaled, aes(x=CREDIT_LIMIT, y=BALANCE)) +
+  geom_point() +
+  labs(title="Normalized Scaling of Attributes") +
+  theme_bw()
+
+# Subplot
+grid.arrange(plt_original, plt_normalized, ncol=2)
+
+```
+Now we have our the attributes of our dataframe normalized to a similar scale.
+The side-by-side plots shown above displays how we were able to preserve the shape of underlying relationships from before we performed the transformations.
+
+```{r}
+df_scaled %>%
+  gather(Attributes, values, c(1:4, 6:12)) %>%
+  ggplot(aes(x=reorder(Attributes, values, FUN=median), y=values, fill=Attributes)) +
+  geom_boxplot(show.legend=FALSE,notch = TRUE) +
+  labs(title="Boxplot Distribution of all Normalized Attributes") +
+  theme(axis.title.y=element_blank(),
+        axis.title.x=element_blank()) +
+  ylim(0, 10) +
+  coord_flip()
+```
+
+
+# PCA Analysis
+```{r}
+pca_scaled <- prcomp(df_scaled,  scale = TRUE)
+
+# Visualize eigenvalues/variances
+fviz_screeplot(pca_scaled, addlabels = TRUE, ylim = c(0, 50),)
+```
+
+
+```{r}
+# Extract the results for variables
+attr_results <- get_pca_var(pca_scaled)
+
+# Contributions of variables to PC1
+fviz_contrib(pca_scaled, choice = "var", axes = 1, top = 10)
+
+# Contributions of variables to PC2
+fviz_contrib(pca_scaled, choice = "var", axes = 2, top = 10)
+```
+
+# KMeans Clustering
+
+## k=4 clusters
+```{r}
+set.seed(123)        
+km_4 <- kmeans(df_scaled, centers=4, nstart = 25)
+BSS_km4 <- km_4$betweenss
+TSS_km4 <- km_4$totss
+
+# Calculate the quality of the partition
+km4_quality <- BSS_km4 / TSS_km4 * 100
+km4_quality
+```
+The quality of the partitioning is 34.89%. This value has no real interpretation in absolute terms except that a higher quality means a higher explained percentage. However, it is more insightful when it is compared to the quality of other paritions in order to determine the best partition among the ones considered.
+
+
+```{r}
+clusplot(df, km_4$cluster, color = TRUE, shade = TRUE, labels = 4, lines = 0, main = "KMeans Cluster Plot (k=4)",)
+```
+
+```{r}
+# number of records in the k=4 clusters
+km_4$size
+```
+
+```{r}
+# summary statistics on each cluster k=4
+aggregate(df, by=list(km_4$cluster), mean)
+```
+
+```{r}
+fviz_cluster(km_4, data = df_scaled, main = "k=4 Cluster Plot")
+```
+
+## k=5 clusters
+```{r}
+set.seed(123)        
+km_5 <- kmeans(df_scaled, centers=5, nstart = 25)
+
+BSS_km5 <- km_5$betweenss
+TSS_km5 <- km_5$totss
+
+# Calculate the quality of the partition
+km5_quality <- BSS_km5 / TSS_km5 * 100
+km5_quality
+
+```
+
+
+```{r}
+clusplot(df, km_5$cluster, color = TRUE, shade = TRUE, labels = 4, lines = 0, main = "KMeans Cluster Plot (k=5)")
+```
+
+```{r}
+# number of records in the k=5 clusters
+km_5$size
+```
+
+```{r}
+# summary statistics on each cluster k=5
+aggregate(df, by=list(km_5$cluster), mean)
+```
+
+## k=6 clusters
+```{r}
+set.seed(123)        
+km_6 <- kmeans(df_scaled, centers=6, nstart = 25)
+
+BSS_km6 <- km_6$betweenss
+TSS_km6 <- km_6$totss
+
+# Calculate the quality of the partition
+km6_quality <- BSS_km6 / TSS_km6 * 100
+km6_quality
+```
+
+```{r}
+clusplot(df, km_6$cluster, color = TRUE, shade = TRUE, labels = 4, lines = 0, main = "KMeans Cluster Plot (k=6)")
+```
+
+```{r}
+# number of records in the k=6 clusters
+km_6$size
+```
+
+```{r}
+# summary statistics on each cluster k=6
+aggregate(df, by=list(km_6$cluster), mean)
+```
+
+## k=7 clusters
+```{r}
+set.seed(123)        
+km_7 <- kmeans(df_scaled, centers=7, nstart = 25)
+BSS_km7 <- km_7$betweenss
+TSS_km7 <- km_7$totss
+
+# Calculate the quality of the partition
+km7_quality <- BSS_km7 / TSS_km7 * 100
+km7_quality
+```
+The quality of the partitioning is 47.76%. This value has no real interpretation in absolute terms except that a higher quality means a higher explained percentage. However, it is more insightful when it is compared to the quality of other partitions in order to determine the best partition among the ones considered.
+
+```{r}
+clusplot(df, km_7$cluster, color = TRUE, shade = TRUE, labels = 4, lines = 0, main = "KMeans Cluster Plot (k=7)",)
+```
+
+```{r}
+# number of records in the k=7 clusters
+km_7$size
+```
+
+```{r}
+# summary statistics on each cluster k=6
+aggregate(df, by=list(km_7$cluster), mean)
+```
+
+
+
+```{r}
+wss <- (nrow(df)-1)*sum(apply(df,2,var))
+
+for (i in 2:15) {
+    wss[i] <- sum(kmeans(df, centers=i)$tot.withinss)
+    }
+
+plot(1:15, wss, type="b", pch = 19, frame = FALSE,
+     xlab="Number of Clusters",
+     ylab="Within groups sum of squares",
+     main = "Elbow Plot for Optimal Number of Clusters")
+```
+
+
+```{r}
+fviz_cluster(km_4, data = df_scaled)
+```
+
+
+```{r}
+fviz_nbclust(df_scaled, kmeans, method = "wss") +
+  geom_vline(xintercept = 4, linetype = 2) +
+  labs(title = "Elbow Plot for Optimal Number of Clusters")
+```
+
+```{r}
+# Execution of kmeans with k=7
+set.seed(123)
+
+km_7 <- kmeans(df_scaled, centers=7)
+
+# Mean values of each cluster
+aggregate(df, by=list(km_7$cluster), mean)
+```
+
+Trying another value for k in the kmeans analysis. Say k = 7
+```{r}
+# number of records amongst each of the 7 clusters
+km_7$size
+```
+
+```{r}
+# Clustering
+ggpairs(cbind(df, Cluster=as.factor(km_7$cluster)),
+        columns=1:6, aes(colour=Cluster, alpha=0.5),
+        lower=list(continuous="points"),
+        upper=list(continuous="blank"),
+        axisLabels="none", switch="both") +
+        theme_bw()
+```
+
+
+
+```{r}
+fviz_cluster(km_7, data = df_scaled)
+```
+
+# 5 Interpretation
+
+In order to iterpret the clusters grouped boxplots will be used. 
+
+
+```{r}
+# for k = 4 clusters
+k4_intrpt <- df
+
+k4_intrpt$cluster <- km_4$cluster
+
+k4_plots <- melt(k4_intrpt, id.var = "cluster")
+
+k4_plots$cluster <- as.factor(k4_intrpt$cluster)
+```
+
+
+```{r}
+k4_plots %>%
+  ggplot(aes(x = variable, y = value)) +
+  geom_boxplot(aes(fill = cluster), outlier.size = 1) +
+  facet_wrap_paginate( ~ variable, scales = "free", ncol = 3, nrow = 2, page = 1) +
+  labs(x = NULL, y = NULL) +theme_minimal()
+
+```
+
+
+cluster1: low balance relative to other clusters, 2nd largest in relation to the number of purchases during a cycle period (indicating large amount of activity).   
+cluster2:
+cluster3: Buying higher priced items during cycle periods, gathered from PURCHASES and INSTALLMENTS_PURCHASES
+cluster4: great deal of assets left over in account at end of cycle period, indicating a greater pool of access to liquid capital
+
+
+```{r}
+k4_plots %>%
+  ggplot(aes(x = variable, y = value)) +
+  geom_boxplot(aes(fill = cluster), outlier.size = 1) +
+  facet_wrap_paginate( ~ variable, scales = "free", ncol = 3, nrow = 3, page = 2) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal()
+```
+cluster1: likely to payoff balance of their cycle period, gathered from PRC_FULL_PAYMENT
+cluster2:
+cluster3:     likely to payoff balance of their cycle period, gathered from PRC_FULL_PAYMENT. Larger access to capital, gathered from CREDIT_LIMIT because banks would give higher                         credit_limits to those with higher tier's of incomes. 
+cluster4:
+
+
+### The clusters can be interpreted as such : 
+- Cluster 1: High frequency user of credit card with a relatively moderate tier of income spending money on lower priced consumer products.
+- Cluster 2: High frequency user of credit card, with a relatively lower tier of income that spends his money mostly on lower priced consumer products. 
+- Cluster 3: Moderate user of credit card, with a middle to higher tier of income that's spending money on higher priced consumer products.  
+- Cluster 4: Infrequent user of credit card, with a middle to higher income tier spending their money lower priced consumer products.
+
+
+
+
+
+
+```{r}
+# for k = 7 clusters
+k7_intrpt <- df
+
+k7_intrpt$cluster <- km_7$cluster
+
+k7_plots <- melt(k7_intrpt, id.var = "cluster")
+
+k7_plots$cluster <- as.factor(k7_intrpt$cluster)
+```
+
+
+
+```{r}
+k7_plots %>%
+  ggplot(aes(x = variable, y = value)) +
+  geom_boxplot(aes(fill = cluster), outlier.size = 1) +
+  facet_wrap_paginate( ~ variable, scales = "free", ncol = 3, nrow = 2, page = 1) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal()
+
+```
+cluster1: low balance relative to other clusters, 2nd largest in relation to the number of purchases during a cycle period (indicating large amount of activity).   
+cluster2:
+cluster3: Buying higher priced items during cycle periods, gathered from PURCHASES and INSTALLMENTS_PURCHASES
+cluster4: great deal of assets left over in account at end of cycle period, indicating a greater pool of access to liquid capital
+
+
+```{r}
+k7_plots %>%
+  ggplot(aes(x = variable, y = value)) +
+  geom_boxplot(aes(fill = cluster), outlier.size = 1) +
+  facet_wrap_paginate( ~ variable, scales = "free", ncol = 3, nrow = 3, page = 2) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal()
+```
+
+
+
+---
+Hierarchical Clustering Code
+---
+
+Load libraries needed
+```{r}
+library(tidyverse)
+library(cluster)
+library(reshape2)
+library(ggplot2)
+library(ggforce)
+```
+
+Read in csv file
+```{r}
+data <- read_csv("C:/Users/Phong/Documents/Masters/Syracuse/IST707/Project/CC GENERAL.csv")
+```
+
+First look at the data
+```{r}
+str(data)
+summary(data)
+```
+
+Data Preprocessing
+
+Remove CUST_ID
+```{r}
+mydata <- data[,-1]
+mydata <- mydata %>% drop_na()
+head(mydata)
+```
+
+Distance Matrix
+```{r}
+distance_mat <- dist(mydata, method = 'euclidean')
+```
+
+Hclust
+```{r}
+set.seed(11)
+hc <- hclust(distance_mat, method = "ward")
+plot(hc)
+```
+
+
+Cut clusters at 4
+```{r}
+groups <- cutree(hc, k = 4)
+table(groups)
+```
+
+Apply cluster labels to original data
+```{r}
+final_data <- cbind(mydata, cluster = groups)
+head(final_data)
+```
+
+Interpretation
+```{r}
+hclust(dist(scale(mydata), method = "euclidean"), method = "ward")
+plot(hc, labels = FALSE, sub = "", xlab = "Cell-Values", ylab = "Euclidean distance")
+rect.hclust(hc, k = 4)
+```
+
+```{r}
+final_results <- aggregate(final_data, by=list(cluster=final_data$cluster), mean)
+final_results
+```
+
+
+---
+Naive-Bayes Code
+---
+
+#Loading in the data.
+CC_Main <- read.csv("~/Downloads/CC GENERAL.csv")
+str(CC_Main)
+
+newCC_Main <- CC_Main %>%
+  select(-c("CUST_ID"))
+
+
+#Create the train and test data.
+
+CC_GeneralSort= sort(sample(nrow(newCC_Main), nrow(CC_Main)*.7))
+CC_TrainNB<-CC_Main[CC_GeneralSort,]
+CC_TestNB<-CC_Main[-CC_GeneralSort,]
+
+str(CC_TrainNB)
+
+# Below the test and train datasets have been coverted to factors from the orginal integers.
+
+CC_TrainNB[sapply(CC_TrainNB, is.numeric)] <- lapply(CC_TrainNB[sapply(CC_TrainNB, is.numeric)], as.factor)
+
+CC_TestNB[sapply(CC_TestNB, is.numeric)] <- lapply(CC_TestNB[sapply(CC_TestNB, is.numeric)], as.factor)
+
+#Below the packages and librarys are loaded for naive bayes and the model is being built.
+
+install.packages("e1071")
+library(e1071)
+
+NBCC_train=naiveBayes(BALANCE~CREDIT LIMIT, data = CC_TrainNB)
+str(NBCC_train)
+
+#Below is the model to predict the test data.
+CC_pred=predict(NBCC_train, newdata=CC_TestNB, type=c("class"))
+
+#Combining the predictions with the corresponding case ids.
+
+myids=c("BALANCE", "CREDIT LIMIT")
+
+id_col=CC_TrainNB$myids
+
+CC_newpred=cbind(id_col, CC_pred)
+
+colnames(CC_newpred)=c("BALANCE")
