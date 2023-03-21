@@ -1,0 +1,327 @@
+```{r}
+setwd("~/Syracuse University/MS Data Science/(3) Spring 2022/IST 719 - Information Visualization/Project/")
+```
+
+```{r}
+df <- read.csv("netflix_titles.csv")
+```
+
+```{r}
+library(tidyverse)
+```
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(naniar)
+library(forcats)
+library(wordcloud)
+library(tm)
+library(SnowballC)
+library(RColorBrewer)
+library(tidytext)
+library(wordcloud)
+library(wordcloud2)
+```
+
+# Color palette to use in Poster
+```{r}
+barplot(c(1,1,1,1), col=c('#221f1f', '#b20710', '#e50914','#f5f5f1'), yaxt= "n"
+        , main = "Color Palette for Netflix"
+        , xlab = "#221f1f               #b20710                  #e50914                  #f5f5f1")
+```
+
+
+###Proportion of TV SHOWS + MOVIES
+```{r}
+p1 <- ggplot(df, aes(x=type, fill=type)) +
+  geom_bar()
+p1
+```
+
+```{r}
+tab_type <- table(df$type)
+pie(tab_type, col = c('#b20710', "#221f1f"))
+```
+
+
+
+```{r}
+df %>%
+ filter(!str_detect(country,',')) %>%
+ group_by(country) %>%
+ count() %>%
+ arrange(desc(n)) %>%
+ head(20) %>%
+ ggplot() + geom_col(aes(y = reorder(country,n), x = n)) +
+ geom_label(aes(y = reorder(country,n), x = n, label = n)) +
+  labs(title = 'Approx. Number of Titles of each Country',
+       subtitle = 'Top 20 Countries') +
+theme_minimal()
+```
+```{r}
+df_country <- aggregate(df, by = list(df$country), FUN = frequency)
+view(df_country)
+```
+
+
+
+
+```{r}
+df%>%
+filter(!str_detect(country, ','))%>%
+group_by(country)%>%
+count()%>%
+arrange(desc(n))%>%
+head(10)%>%
+arrange(desc(n))%>%
+ggplot() + 
+  geom_col(aes(x = reorder(country,n), y = n)) +
+ # geom_label(aes(x = reorder(country,n), y = n, label = n)) +
+  labs(title = 'Number of Titles of each Country') +
+       # subtitle = 'Top 10 Countries') +
+  xlab("Country") +
+  ylab("Frequency") +
+  # caption = 'Data Source: Kaggle ') +
+  theme_minimal()
+```
+
+# wordcloud of ALL word titles
+```{r}
+library(wordcloud2)
+title_words_all <- df %>% select(type, show_id, title) %>%
+    unnest_tokens(word, title) %>%
+    anti_join(stop_words)
+
+count_word <- title_words_all %>%
+   count(word, sort = TRUE)
+
+wordcloud2(count_word, size = 0.7, shape = 'star')
+
+wordcloud2(count_word, figPath = "Netflix-N-Symbol-logo.jpg", size = 1.0, color = "white", backgroundColor="black")
+
+wordcloud(words = count_word$word,  
+          freq = count_word$n,
+
+min.freq = 10,  
+          max.words = nrow(count_word), 
+          random.order = FALSE,  
+          rot.per = 0.1,  
+          colors = brewer.pal(8, "Paired"))
+```
+
+```{r}
+library(wordcloud2)
+title_words_all <- df %>% select(type, show_id, title) %>%
+    unnest_tokens(word, title) %>%
+    anti_join(stop_words)
+
+count_word <- title_words_all %>%
+   count(word, sort = TRUE)
+
+wordcloud2(count_word, size = 0.7, shape = 'star')
+
+wordcloud2(count_word, figPath = "Netflix-N-Symbol-logo.jpg", size = 1.0, color = "white", backgroundColor="black")
+
+wordcloud(words = count_word$word,  
+          freq = count_word$n,
+
+min.freq = 10,  
+          max.words = nrow(count_word), 
+          random.order = FALSE,  
+          rot.per = 0.1,  
+          colors = brewer.pal(8, "Paired"))
+```
+
+
+```{r}
+library(wordcloud2)
+title_words_all <- df %>% select(type, show_id, title) %>%
+    unnest_tokens(word, title) %>%
+    anti_join(stop_words)
+
+title_words_all$word
+
+count_word <- title_words_all %>%
+   count(word, sort = TRUE)
+
+wordcloud2(count_word, size = 1, shape = 'N')
+
+wordcloud2(count_word, figPath = "Netflix_outline2_cust2.png", size = 1, color = "red", backgroundColor="black")
+
+wordcloud(words = count_word$word,  
+          freq = count_word$n,
+
+min.freq = 10,  
+          max.words = nrow(count_word), 
+          random.order = FALSE,  
+          rot.per = 0.1,  
+          colors = brewer.pal(8, "Paired"))
+
+letterCloud( count_word, word = "N", color='red' , backgroundColor="red")
+```
+```{r}
+library("readr")
+words_df <- data.frame(title_words_all$word)
+# Writing mtcars data to a tsv file
+write_tsv(words_df, file = "words.txt", delim = " ")
+```
+
+
+
+# most common word found in Netflix media titles
+```{r}
+desc_words_m <- df %>% select(type, show_id, description) %>%
+  filter(type == "Movie") %>% 
+    unnest_tokens(word, description) %>%
+    anti_join(stop_words)
+
+count_word <- desc_words_m %>%
+   count(word, sort = TRUE)
+
+wordcloud(words = count_word$word,  
+          freq = count_word$n,
+
+min.freq = 50,  
+          max.words = nrow(count_word), 
+          random.order = FALSE,  
+          rot.per = 0.1,  
+          colors = brewer.pal(8, "Paired"))
+```
+
+```{r}
+desc_words_tv <- df %>% select(type, show_id, description) %>% 
+  filter(type == "TV Show") %>% 
+  unnest_tokens(word, description) %>%
+  anti_join(stop_words)
+
+count_word <- desc_words_tv %>%
+   count(word, sort = TRUE)
+
+
+wordcloud(words = count_word$word,  
+          freq = count_word$n, 
+          min.freq = 30,  
+          max.words = nrow(count_word), 
+          random.order = FALSE,  
+          rot.per = 0.1,  
+          colors = brewer.pal(8, "Dark2"))
+```
+
+```{r}
+desc_words_gen <- df %>% select(type, show_id, description) %>% 
+  # filter(type == "TV Show") %>% 
+  unnest_tokens(word, description) %>%
+  anti_join(stop_words)
+
+count_word <- desc_words_gen %>%
+   count(word, sort = TRUE)
+
+
+wordcloud(words = count_word$word,  
+          freq = count_word$n, 
+          min.freq = 30,  
+          max.words = nrow(count_word), 
+          random.order = FALSE,  
+          rot.per = 0.1,  
+          colors = brewer.pal(8, "Dark2"))
+```
+
+```{r}
+df$general_rating[df$rating == "G" | df$rating == "TV-Y" | df$rating == "TV-Y7" | df$rating == "TV-Y7-FV" | df$rating == "TV-G"] <- "Child"
+df$general_rating[df$rating == "PG" | df$rating == "TV-PG"] <- "Teenager"
+df$general_rating[df$rating == "PG-13" | df$rating == "TV-14"] <- "Young Adult"
+df$general_rating[df$rating == "R" | df$rating == "NR" | df$rating == "UR" | df$rating == "NC-17" | df$rating == "TV-MA" | df$rating == "66 min" | df$rating == "74 min" | df$rating == "84 min"] <- "Adult"
+  
+
+table(df$general_rating)
+table(df$rating)
+```
+```{r}
+# df[is.na(df$general_rating),]
+df$general_rating[df$show_id == "s5990"] <- "Teenager"
+df$general_rating[df$show_id == "s6828"] <- "Young Adult"
+df$general_rating[df$show_id == "s7313"] <- "Child"
+df$general_rating[df$show_id == "s7538"] <- "Adult"
+```
+
+
+
+```{r}
+# ggplot(df, aes(x=general_rating, fill = general_rating)) + 
+#   geom_bar()
+tab_general_rating <- table(df$general_rating)
+bp <- barplot(tab_general_rating, col = c('#221f1f', '#b20710', '#e50914','#C0C2C9')
+        , ylim = c(0,5000)
+        , ylab = "Number of Titles"
+        , main = "Audience Netflix Markets Towards")
+text(x = bp, 0, round(tab_general_rating, 1), cex=2, pos=3, col = c('#F0EAD6'))
+
+```
+```{r}
+ggplot(df, aes(x=release_year, fill = type)) +
+  geom_histogram(alpha = .75, binwidth = 1)
+  #geom_histogram(aes(y=..density..), position = 'identity',alpha = .5) +
+  #geom_density(alpha = .6)
+```
+
+
+
+
+
+
+
+
+
+
+```{r}
+require(devtools)
+install_github("lchiffon/wordcloud2")
+```
+```{r}
+library(wordcloud2)
+wordcloud2(demoFreq)
+```
+
+
+```{r}
+head(demoFreq)
+```
+
+```{r}
+wordcloud2(demoFreq, color = "random-light", backgroundColor = "grey")
+```
+
+```{r}
+#figPath = system.file("examples/t.png",package = "wordcloud2")
+wordcloud2(count_word, figPath = "transparent_netflix_logo.png", size = 1.5,color = "skyblue")
+```
+
+
+```{r}
+letterCloud(count_word, word = "N", size = 1.0)
+```
+
+
+```{r}
+letterCloud(count_word, word = "WORDCLOUD2", wordSize = 1)
+```
+
+
+```{r}
+table(df$listed_in)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
