@@ -1,0 +1,118 @@
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(scales)
+```
+
+```{r}
+sales_date <- c('2021-01-06','2021-01-13','2021-01-20','2021-02-27','2021-03-14','2021-12-06','2021-12-10')
+rewards_value <- c(77900,37500,17300,47900,4800,-50000,-100000)
+```
+
+```{r}
+sales_date <- as.Date(sales_date)
+df <- data.frame(sales_date, rewards_value)
+```
+
+```{r}
+str(df)
+```
+
+```{r}
+df %>% 
+  select(sales_date, rewards_value) %>% 
+  group_by(sales_date) %>%
+  summarise(sales = sum(rewards_value)) %>% 
+  mutate(CumSales = cumsum(sales)) %>% 
+  mutate(totalSales = sum(sales)) %>% 
+  ggplot(aes(x=sales_date, CumSales)) +
+    geom_line('color'='red')+
+    geom_point()+
+    scale_y_continuous(labels = comma)+
+  #  scale_y_continuous(breaks = round(seq(min(df$rewards_value), max(df$rewards_value), by = 10000)), labels = comma)+
+  ggtitle('Running Balance of a Selected Loyalty Account')
+
+```
+
+
+```{r}
+
+ggplot(data=df, aes(x=sales_date, y=rewards_value), group=1) +
+  geom_line(color='red') +
+  geom_point() +
+  scale_y_continuous(breaks = round(seq(min(df$rewards_value), max(df$rewards_value), by = 10000)), labels = comma)+
+  ggtitle('Running Balance of a Selected Loyalty Account')
+```
+
+
+
+
+
+
+
+
+
+
+```{r}
+banks <- c('BOA Travel Rewards','Visa Signature Rewards','Regions Student Rewards','Signature Cashback Rewards','BOA Premium Rewards','BOA Cash Rewards')
+cumulative_points_earned <- c(7900,8300,23800,43500,56000,185400)
+df2 <- data.frame(banks, cumulative_points_earned)
+```
+
+```{r}
+a <- ggplot(data=df2, aes(x=banks, y=cumulative_points_earned)) +
+  geom_bar(stat='identity', width = 0.5, color = 'orange', fill = 'royalblue') +
+  geom_text(aes(label=cumulative_points_earned), vjust=-0.3, size=3.5)+
+   theme(axis.text.x=element_text(angle = -65, hjust=0))+
+  ggtitle('Points Accumulation Across the Groups')
+   
+a
+```
+
+
+
+```{r}
+Item <- c('$25 Cashback','$10 Cashback','$50 Cashback','$100 Amazon GC')
+freq <- c(3,2,1,1)
+df3 <- data.frame(Item, freq)
+```
+
+```{r}
+ggplot(df3, aes(x="", y=freq, fill=Item,)) +
+  geom_bar(width = 1, stat="identity") +
+  coord_polar("y", start=0)+
+  theme(axis.text.x=element_blank())+
+  ggtitle('Pie Chart of the Breakdown of Redeemed Items')
+```
+
+
+
+```{r}
+Banks <- c('Bank of America','Regions','Navy Federal Credit Union')
+total_account_users <- c(7,4,5)
+df4 <- data.frame(Banks, total_account_users)
+```
+
+```{r}
+ggplot(data=df4, aes(x=Banks, y=total_account_users)) +
+  geom_bar(stat='identity', width = 0.5, color = 'orange', fill = 'royalblue') +
+  geom_text(aes(label=total_account_users), vjust=-0.05, size=3.0)+
+   theme(axis.text.x=element_text(angle = -65, hjust=0))+
+  ggtitle('Number of Accounts each Issuing Bank holds')
+```
+
+```{r}
+accts <- c(2,7,4,5,3,1)
+max_sales <- c(79.00,83.00,238.00,435.00,560.00,1854.00)
+df5 <- data.frame(banks,accts,max_sales)
+```
+
+
+```{r}
+ggplot(data=df5, aes(x=banks, y=max_sales)) +
+  geom_bar(stat='identity', width = 0.5, color = 'orange', fill = 'royalblue') +
+  geom_text(aes(label=max_sales), vjust=-0.05, size=3.0)+
+   theme(axis.text.x=element_text(angle = -65, hjust=0))+
+  ggtitle('Total Credit Spent Amongst each Group')
+```
+
